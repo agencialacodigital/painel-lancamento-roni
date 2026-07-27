@@ -6,7 +6,7 @@
 <title>Painel de Lançamento — Roni Isotton</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 <style>
   :root{
     --black:#090909;
@@ -521,6 +521,15 @@ async function load(showSpin){
     if(showSpin) setTimeout(()=>ic.classList.remove('spinning'), 400);
   }
 }
+
+function showFatalError(msg){
+  const box = document.getElementById('errBox');
+  box.style.display = 'block';
+  box.textContent = 'Erro no painel: ' + msg;
+  setLive(false);
+}
+window.addEventListener('error', (e)=> showFatalError(e.message));
+window.addEventListener('unhandledrejection', (e)=> showFatalError(e.reason && e.reason.message ? e.reason.message : String(e.reason)));
 
 document.querySelectorAll('#tblCampanhas thead th[data-k]').forEach(th=>{
   th.addEventListener('click', ()=>{
