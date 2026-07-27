@@ -74,7 +74,7 @@
 
   /* ---------- kpis ---------- */
   .kpis{
-    display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+    display:grid; grid-template-columns:repeat(7,1fr); gap:1px;
     background:var(--line); border:1px solid var(--line); margin-bottom:22px;
   }
   .kpi{
@@ -222,8 +222,13 @@
               <th class="num" data-k="leads">Leads</th>
               <th class="num" data-k="investido">Investido</th>
               <th class="num" data-k="cpl">CPL</th>
+              <th class="num" data-k="impressoes">Impr.</th>
+              <th class="num" data-k="cpm">CPM</th>
               <th class="num" data-k="cliques">Cliques</th>
+              <th class="num" data-k="cpc">CPC</th>
               <th class="num" data-k="ctr">CTR</th>
+              <th class="num" data-k="convClique">Conv.</th>
+              <th class="num" data-k="frequencia">Freq.</th>
               <th class="num" data-k="vendas">Vendas</th>
               <th class="num" data-k="faturamento">Faturamento</th>
               <th class="num" data-k="roas">ROAS</th>
@@ -258,10 +263,25 @@
     </div>
   </div>
 
+  <div class="row" id="eventosRow" style="display:none;">
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">06</span> Inscritos vs. preenchimento do quiz</h2>
+        <span class="note">quantos se inscreveram no evento e quantos responderam o quiz de qualificação</span>
+      </div>
+      <div class="table-scroll" style="max-height:280px;">
+        <table id="tblEventos">
+          <thead><tr><th>Evento</th><th class="num">Inscritos</th><th class="num">Preencheram o quiz</th><th class="num">% Conclusão</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="row" id="quizRow" style="display:none;">
     <div class="panel">
       <div class="panel-head">
-        <h2><span class="n">06</span> Perfil da audiência</h2>
+        <h2><span class="n">07</span> Perfil da audiência</h2>
         <span class="note" id="quizNote">respostas do quiz de qualificação</span>
       </div>
       <div class="quiz-grid" id="quizGrid"></div>
@@ -317,6 +337,7 @@ function renderKpis(d){
     { lbl:'Vendas', val: fmtNum(k.total_vendas), sub:`conversão de ${convLeadVenda.toFixed(1)}% sobre leads`, good:true },
     { lbl:'Faturamento', val: fmtBRL(k.faturamento), sub:`${convPreVenda.toFixed(1)}% de quem iniciou checkout comprou`, good:true },
     { lbl:'ROAS', val: roas>0 ? roas.toFixed(2)+'x' : '—', sub: roas>=3 ? 'saudável' : (roas>0 ? 'abaixo do ideal (3x+)' : 'sem dados de investimento'), good: roas>=3 },
+    { lbl:'Frequência média', val: k.freq_avg>0 ? k.freq_avg.toFixed(2) : '—', sub: k.freq_avg>2.5 ? 'criativo pode estar saturando' : 'saudável' },
   ];
   document.getElementById('kpiRow').innerHTML = items.map(it => `
     <div class="kpi ${it.good?'good':''}">
@@ -416,8 +437,11 @@ function renderCampanhas(d){
   const raw = (d.campanhas||[]).map(r=>{
     const cpl = r.leads>0 ? r.investido/r.leads : (r.investido>0 ? r.investido : 0);
     const ctr = r.impressoes>0 ? (r.cliques/r.impressoes*100) : 0;
+    const cpm = r.impressoes>0 ? (r.investido/r.impressoes*1000) : 0;
+    const cpc = r.cliques>0 ? (r.investido/r.cliques) : 0;
+    const convClique = r.cliques>0 ? (r.leads/r.cliques*100) : 0;
     const roas = r.investido>0 ? (r.faturamento/r.investido) : 0;
-    return {...r, cpl, ctr, roas};
+    return {...r, cpl, ctr, cpm, cpc, convClique, roas};
   });
   const withSpend = raw.filter(r=>r.investido>0 && r.leads>0);
   const avgCpl = withSpend.length ? withSpend.reduce((a,r)=>a+r.cpl,0)/withSpend.length : 0;
@@ -435,7 +459,7 @@ function renderCampanhas(d){
 
   const tbody = document.querySelector('#tblCampanhas tbody');
   if(!raw.length){
-    tbody.innerHTML = `<tr><td colspan="10" class="empty">Sem campanhas no período selecionado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="empty">Sem campanhas no período selecionado.</td></tr>`;
     return;
   }
   tbody.innerHTML = raw.map(r=>{
@@ -445,8 +469,13 @@ function renderCampanhas(d){
       <td class="num">${fmtNum(r.leads)}</td>
       <td class="num">${fmtBRL(r.investido)}</td>
       <td class="num">${r.cpl>0?fmtBRL(r.cpl):'—'}</td>
+      <td class="num">${fmtNum(r.impressoes)}</td>
+      <td class="num">${r.cpm>0?fmtBRL(r.cpm):'—'}</td>
       <td class="num">${fmtNum(r.cliques)}</td>
+      <td class="num">${r.cpc>0?fmtBRL(r.cpc):'—'}</td>
       <td class="num">${r.ctr>0?fmtPct(r.ctr):'—'}</td>
+      <td class="num">${r.convClique>0?fmtPct(r.convClique):'—'}</td>
+      <td class="num">${r.frequencia>0?r.frequencia.toFixed(2):'—'}</td>
       <td class="num">${fmtNum(r.vendas)}</td>
       <td class="num">${fmtBRL(r.faturamento)}</td>
       <td class="num">${r.roas>0?r.roas.toFixed(2)+'x':'—'}</td>
@@ -490,6 +519,24 @@ function renderQuiz(d){
   }).join('');
 }
 
+function renderEventos(d){
+  const rows = (d.eventos||[]).filter(r=>r.inscritos>0);
+  const row = document.getElementById('eventosRow');
+  if(!rows.length){ row.style.display='none'; return; }
+  row.style.display='';
+  const sorted = [...rows].sort((a,b)=>b.inscritos-a.inscritos);
+  const tbody = document.querySelector('#tblEventos tbody');
+  tbody.innerHTML = sorted.map(r=>{
+    const pct = r.inscritos>0 ? (r.quiz_preenchido/r.inscritos*100) : 0;
+    return `<tr>
+      <td class="name" title="${r.evento}">${r.evento}</td>
+      <td class="num">${fmtNum(r.inscritos)}</td>
+      <td class="num">${fmtNum(r.quiz_preenchido)}</td>
+      <td class="num">${fmtPct(pct)}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderAll(d){
   currentData = d;
   renderKpis(d);
@@ -498,6 +545,7 @@ function renderAll(d){
   renderCampanhas(d);
   renderCriativos(d);
   renderProdutos(d);
+  renderEventos(d);
   renderQuiz(d);
   document.getElementById('updatedAt').textContent = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR');
 }
