@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Lançamento — Roni Isotton</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --black:#090909;
+    --panel:#121212;
+    --panel-2:#181818;
+    --line:#2a2a2a;
+    --red:#C41E1E;
+    --red-dim:#7a1414;
+    --green:#3fae5c;
+    --amber:#d9a441;
+    --text:#f2f2f0;
+    --text-dim:#9a9a97;
+    --text-faint:#6b6b68;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--black);color:var(--text);font-family:'Barlow',sans-serif;}
+  body{padding:0 0 60px 0;}
+
+  .grain{
+    position:fixed; inset:0; pointer-events:none; opacity:.035; z-index:0;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap{position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:22px 26px 0;}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding-bottom:18px; margin-bottom:22px; border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:center; gap:14px;}
+  .brand .mark{
+    width:40px;height:40px; background:var(--red); flex:none;
+    clip-path:polygon(15% 0,100% 0,85% 100%,0 100%);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:#fff;
+  }
+  h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:800; letter-spacing:.02em;
+    font-size:28px; line-height:1; margin:0; text-transform:uppercase;
+  }
+  .brand .sub{font-size:12.5px; color:var(--text-dim); margin-top:4px; font-family:'JetBrains Mono',monospace; letter-spacing:.02em;}
+
+  .status{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+  .live{display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em;}
+  .dot{width:8px;height:8px;border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(63,174,92,.6); animation:pulse 2s infinite;}
+  .dot.off{background:var(--red);}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(63,174,92,.55);}
+    70%{box-shadow:0 0 0 8px rgba(63,174,92,0);}
+    100%{box-shadow:0 0 0 0 rgba(63,174,92,0);}
+  }
+  select, button.ghost{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    font-family:'JetBrains Mono',monospace; font-size:12px; padding:8px 12px;
+    cursor:pointer; text-transform:uppercase; letter-spacing:.04em;
+  }
+  select:focus, button.ghost:focus-visible{outline:2px solid var(--red); outline-offset:2px;}
+  button.ghost{display:flex;align-items:center;gap:8px;}
+  button.ghost:hover{border-color:var(--red);}
+  .refresh-ic{width:12px;height:12px;display:inline-block;transition:transform .5s;}
+  .spinning{animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------- kpis ---------- */
+  .kpis{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); margin-bottom:22px;
+  }
+  .kpi{
+    background:var(--panel); padding:18px 18px 16px; position:relative; overflow:hidden;
+    min-width:0;
+  }
+  .kpi::before{
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red-dim);
+  }
+  .kpi.good::before{background:var(--green);}
+  .kpi .lbl{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.07em; margin-bottom:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .kpi .val{font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:30px; line-height:1; color:var(--text); white-space:nowrap;}
+  .kpi .val small{font-size:15px; color:var(--text-dim); font-weight:600;}
+  .kpi .sub{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-faint); margin-top:8px;}
+
+  @media(max-width:1100px){ .kpis{grid-template-columns:repeat(3,1fr);} }
+  @media(max-width:600px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+
+  /* ---------- section shell ---------- */
+  .row{display:grid; gap:1px; background:var(--line); border:1px solid var(--line); margin-bottom:22px;}
+  .row.split{grid-template-columns:1.7fr 1fr;}
+  @media(max-width:900px){ .row.split{grid-template-columns:1fr;} }
+
+  .panel{background:var(--panel); padding:20px;}
+  .panel-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; gap:10px; flex-wrap:wrap;}
+  .panel-head h2{
+    font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; font-weight:700;
+    font-size:16px; letter-spacing:.04em; margin:0; color:var(--text);
+    display:flex; align-items:center; gap:10px;
+  }
+  .panel-head h2 .n{color:var(--red); font-family:'JetBrains Mono',monospace; font-size:13px;}
+  .panel-head .note{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-faint);}
+  .chart-box{position:relative; height:260px;}
+  .chart-box.tall{height:300px;}
+
+  /* ---------- tables ---------- */
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:left; font-family:'JetBrains Mono',monospace; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--text-dim); font-weight:500; padding:0 10px 10px; border-bottom:1px solid var(--line);
+    cursor:pointer; white-space:nowrap; user-select:none;
+  }
+  thead th:hover{color:var(--text);}
+  thead th.sorted{color:var(--red);}
+  tbody td{padding:11px 10px; border-bottom:1px solid #1c1c1c; color:var(--text); vertical-align:middle;}
+  tbody tr:hover{background:#161616;}
+  td.num, th.num{text-align:right; font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums;}
+  td.name{max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .table-scroll{max-height:420px; overflow-y:auto;}
+
+  .tag{
+    display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:10px;
+    text-transform:uppercase; letter-spacing:.04em; padding:4px 8px; border:1px solid; white-space:nowrap;
+  }
+  .tag.scale{color:var(--green); border-color:var(--green); background:rgba(63,174,92,.08);}
+  .tag.watch{color:var(--amber); border-color:var(--amber); background:rgba(217,164,65,.08);}
+  .tag.cut{color:var(--red); border-color:var(--red); background:rgba(196,30,30,.1);}
+  .tag.neutral{color:var(--text-dim); border-color:var(--line); background:transparent;}
+
+  .empty{padding:40px 10px; text-align:center; color:var(--text-faint); font-family:'JetBrains Mono',monospace; font-size:12px;}
+
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-track{background:var(--panel);}
+  ::-webkit-scrollbar-thumb{background:var(--line);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red-dim);}
+
+  .quiz-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:18px;}
+  @media(max-width:1100px){ .quiz-grid{grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:560px){ .quiz-grid{grid-template-columns:1fr;} }
+  .qcard{background:var(--panel-2); border:1px solid var(--line); padding:14px 15px;}
+  .qcard .qlbl{font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-dim); margin-bottom:12px; line-height:1.35; min-height:28px;}
+  .qbar-row{margin-bottom:9px;}
+  .qbar-row:last-child{margin-bottom:0;}
+  .qbar-top{display:flex; justify-content:space-between; gap:8px; font-size:11.5px; margin-bottom:4px;}
+  .qbar-top .a{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qbar-top .n{font-family:'JetBrains Mono',monospace; color:var(--text-dim); flex:none;}
+  .qbar-track{height:5px; background:#0d0d0d; border:1px solid var(--line);}
+  .qbar-fill{height:100%; background:var(--red);}
+
+  .footer-note{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-faint); text-align:center; padding-top:6px;}
+  .err{background:#2a1414; border:1px solid var(--red-dim); color:#f2b9b9; padding:12px 16px; font-family:'JetBrains Mono',monospace; font-size:12px; margin-bottom:20px; display:none;}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">RI</div>
+      <div>
+        <h1>Painel de Aquisição</h1>
+        <div class="sub" id="subtitle">LANÇAMENTO · RONI ISOTTON</div>
+      </div>
+    </div>
+    <div class="status">
+      <div class="live"><span class="dot" id="liveDot"></span><span id="liveText">Ao vivo</span></div>
+      <span class="sub" id="updatedAt" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);"></span>
+      <select id="periodSelect">
+        <option value="7">Últimos 7 dias</option>
+        <option value="14">Últimos 14 dias</option>
+        <option value="30" selected>Últimos 30 dias</option>
+        <option value="60">Últimos 60 dias</option>
+        <option value="90">Últimos 90 dias</option>
+      </select>
+      <button class="ghost" id="refreshBtn">
+        <svg class="refresh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
+        Atualizar
+      </button>
+    </div>
+  </div>
+
+  <div class="err" id="errBox"></div>
+
+  <div class="kpis" id="kpiRow"></div>
+
+  <div class="row split">
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">01</span> Leads por dia</h2>
+        <span class="note" id="leadsDayNote"></span>
+      </div>
+      <div class="chart-box"><canvas id="chartLeadsDay"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">02</span> Origem do tráfego</h2>
+        <span class="note">utm_source</span>
+      </div>
+      <div class="chart-box"><canvas id="chartOrigem"></canvas></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">03</span> Campanhas &amp; custo por lead</h2>
+        <span class="note">clique nos cabeçalhos para ordenar · cruzado com Meta Ads Insights</span>
+      </div>
+      <div class="table-scroll">
+        <table id="tblCampanhas">
+          <thead>
+            <tr>
+              <th data-k="campanha_nome">Campanha</th>
+              <th class="num" data-k="leads">Leads</th>
+              <th class="num" data-k="investido">Investido</th>
+              <th class="num" data-k="cpl">CPL</th>
+              <th class="num" data-k="cliques">Cliques</th>
+              <th class="num" data-k="ctr">CTR</th>
+              <th class="num" data-k="vendas">Vendas</th>
+              <th class="num" data-k="faturamento">Faturamento</th>
+              <th class="num" data-k="roas">ROAS</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="row split">
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">04</span> Criativos com mais leads</h2>
+        <span class="note">utm_term / utm_content</span>
+      </div>
+      <div class="chart-box tall"><canvas id="chartCriativos"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">05</span> Produtos vendidos</h2>
+        <span class="note">aprovados + completos</span>
+      </div>
+      <div class="table-scroll" style="max-height:300px;">
+        <table id="tblProdutos">
+          <thead><tr><th>Produto</th><th class="num">Vendas</th><th class="num">Faturamento</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" id="quizRow" style="display:none;">
+    <div class="panel">
+      <div class="panel-head">
+        <h2><span class="n">06</span> Perfil da audiência</h2>
+        <span class="note" id="quizNote">respostas do quiz de qualificação</span>
+      </div>
+      <div class="quiz-grid" id="quizGrid"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">Fonte: Supabase (roni-isotton-n8n) · função get_dashboard_stats · atualização automática a cada 60s</div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://wwjkwhndnoitfvozljpo.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3amt3aG5kbm9pdGZ2b3psanBvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyMDYyMzMsImV4cCI6MjA5Mzc4MjIzM30.zxKV6dq05XGiQXFBWbNcH0R_zZqWn0SklUj6ST98vtg';
+
+let currentData = null;
+let sortState = { key: 'investido', dir: 'desc' };
+let charts = {};
+let refreshTimer = null;
+
+const fmtBRL = (v) => (v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+const fmtNum = (v) => (v||0).toLocaleString('pt-BR');
+const fmtPct = (v) => (v||0).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
+
+async function fetchStats(days){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_dashboard_stats`, {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
+    },
+    body: JSON.stringify({ p_days: days })
+  });
+  if(!res.ok) throw new Error(`Erro ${res.status} ao consultar Supabase`);
+  return res.json();
+}
+
+function setLive(ok){
+  document.getElementById('liveDot').classList.toggle('off', !ok);
+  document.getElementById('liveText').textContent = ok ? 'Ao vivo' : 'Sem conexão';
+}
+
+function renderKpis(d){
+  const k = d.kpis;
+  const cpl = k.invest_total>0 ? k.invest_total / Math.max(k.total_leads,1) : 0;
+  const roas = k.invest_total>0 ? k.faturamento / k.invest_total : 0;
+  const convLeadVenda = k.total_leads>0 ? (k.total_vendas / k.total_leads * 100) : 0;
+  const convPreVenda = k.leads_com_precheckout>0 ? (k.total_vendas / k.leads_com_precheckout * 100) : 0;
+
+  const items = [
+    { lbl:'Total de leads', val: fmtNum(k.total_leads), sub:`${fmtNum(k.leads_com_precheckout)} iniciaram checkout`, good:true },
+    { lbl:'Investido (Meta Ads)', val: fmtBRL(k.invest_total), sub:`${fmtNum(k.impressions_total)} impressões` },
+    { lbl:'Custo por lead', val: cpl>0 ? fmtBRL(cpl) : '—', sub: cpl>0 ? `sobre ${fmtNum(k.total_leads)} leads totais` : 'sem investimento no período' },
+    { lbl:'Vendas', val: fmtNum(k.total_vendas), sub:`conversão de ${convLeadVenda.toFixed(1)}% sobre leads`, good:true },
+    { lbl:'Faturamento', val: fmtBRL(k.faturamento), sub:`${convPreVenda.toFixed(1)}% de quem iniciou checkout comprou`, good:true },
+    { lbl:'ROAS', val: roas>0 ? roas.toFixed(2)+'x' : '—', sub: roas>=3 ? 'saudável' : (roas>0 ? 'abaixo do ideal (3x+)' : 'sem dados de investimento'), good: roas>=3 },
+  ];
+  document.getElementById('kpiRow').innerHTML = items.map(it => `
+    <div class="kpi ${it.good?'good':''}">
+      <div class="lbl">${it.lbl}</div>
+      <div class="val">${it.val}</div>
+      <div class="sub">${it.sub}</div>
+    </div>
+  `).join('');
+}
+
+function chartDefaults(){
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.color = '#9a9a97';
+  Chart.defaults.font.size = 11;
+}
+
+function renderLeadsDay(d){
+  const rows = d.leads_by_day || [];
+  document.getElementById('leadsDayNote').textContent = `${fmtNum(rows.reduce((a,r)=>a+r.leads,0))} leads no período`;
+  const ctx = document.getElementById('chartLeadsDay');
+  if(charts.leadsDay) charts.leadsDay.destroy();
+  charts.leadsDay = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: rows.map(r => r.dia.slice(5).split('-').reverse().join('/')),
+      datasets:[{
+        data: rows.map(r=>r.leads),
+        backgroundColor:'#C41E1E',
+        borderRadius:1,
+        maxBarThickness:22,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{title:(items)=>`Dia ${items[0].label}`, label:(item)=>`${fmtNum(item.raw)} leads`}}},
+      scales:{
+        x:{grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:12}},
+        y:{grid:{color:'#1c1c1c'}, beginAtZero:true}
+      }
+    }
+  });
+}
+
+function renderOrigem(d){
+  const rows = (d.leads_by_source||[]).slice(0,7);
+  const total = rows.reduce((a,r)=>a+r.leads,0);
+  const palette = ['#C41E1E','#e0e0dc','#7a1414','#6b6b68','#3fae5c','#d9a441','#4a4a48'];
+  const ctx = document.getElementById('chartOrigem');
+  if(charts.origem) charts.origem.destroy();
+  charts.origem = new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels: rows.map(r=>r.canal),
+      datasets:[{ data: rows.map(r=>r.leads), backgroundColor: palette, borderColor:'#121212', borderWidth:2 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{
+        legend:{position:'bottom', labels:{boxWidth:10, boxHeight:10, padding:12, font:{size:10.5}}},
+        tooltip:{callbacks:{label:(item)=>{
+          const pct = total>0 ? (item.raw/total*100).toFixed(1) : 0;
+          return `${item.label}: ${fmtNum(item.raw)} (${pct}%)`;
+        }}}
+      }
+    }
+  });
+}
+
+function renderCriativos(d){
+  const rows = (d.criativos||[]).filter(r=>r.criativo!=='Não identificado').slice(0,12);
+  const ctx = document.getElementById('chartCriativos');
+  if(charts.criativos) charts.criativos.destroy();
+  charts.criativos = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: rows.map(r=>r.criativo),
+      datasets:[{ data: rows.map(r=>r.leads), backgroundColor:'#C41E1E', borderRadius:1, maxBarThickness:16 }]
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(item)=>`${fmtNum(item.raw)} leads`}}},
+      scales:{ x:{grid:{color:'#1c1c1c'}, beginAtZero:true}, y:{grid:{display:false}} }
+    }
+  });
+}
+
+function classify(row, avgCpl){
+  if(row.investido<=0 && row.leads>0) return {tag:'neutral', label:'Orgânico'};
+  if(row.investido<=0) return {tag:'neutral', label:'Sem dados'};
+  if(row.leads===0) return {tag:'cut', label:'Pausar'};
+  if(avgCpl>0 && row.cpl <= avgCpl*0.7) return {tag:'scale', label:'Escalar'};
+  if(avgCpl>0 && row.cpl >= avgCpl*1.4) return {tag:'cut', label:'Otimizar'};
+  return {tag:'watch', label:'Observar'};
+}
+
+function renderCampanhas(d){
+  const raw = (d.campanhas||[]).map(r=>{
+    const cpl = r.leads>0 ? r.investido/r.leads : (r.investido>0 ? r.investido : 0);
+    const ctr = r.impressoes>0 ? (r.cliques/r.impressoes*100) : 0;
+    const roas = r.investido>0 ? (r.faturamento/r.investido) : 0;
+    return {...r, cpl, ctr, roas};
+  });
+  const withSpend = raw.filter(r=>r.investido>0 && r.leads>0);
+  const avgCpl = withSpend.length ? withSpend.reduce((a,r)=>a+r.cpl,0)/withSpend.length : 0;
+
+  const dir = sortState.dir==='asc' ? 1 : -1;
+  raw.sort((a,b)=>{
+    let av=a[sortState.key], bv=b[sortState.key];
+    if(typeof av === 'string') return av.localeCompare(bv)*dir;
+    return ((av||0)-(bv||0))*dir;
+  });
+
+  document.querySelectorAll('#tblCampanhas thead th').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.k===sortState.key);
+  });
+
+  const tbody = document.querySelector('#tblCampanhas tbody');
+  if(!raw.length){
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">Sem campanhas no período selecionado.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = raw.map(r=>{
+    const c = classify(r, avgCpl);
+    return `<tr>
+      <td class="name" title="${r.campanha_nome}">${r.campanha_nome}</td>
+      <td class="num">${fmtNum(r.leads)}</td>
+      <td class="num">${fmtBRL(r.investido)}</td>
+      <td class="num">${r.cpl>0?fmtBRL(r.cpl):'—'}</td>
+      <td class="num">${fmtNum(r.cliques)}</td>
+      <td class="num">${r.ctr>0?fmtPct(r.ctr):'—'}</td>
+      <td class="num">${fmtNum(r.vendas)}</td>
+      <td class="num">${fmtBRL(r.faturamento)}</td>
+      <td class="num">${r.roas>0?r.roas.toFixed(2)+'x':'—'}</td>
+      <td><span class="tag ${c.tag}">${c.label}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderProdutos(d){
+  const map = {};
+  (d.produtos||[]).forEach(r=>{
+    if(!['APPROVED','COMPLETED'].includes(r.status)) return;
+    if(!map[r.produto]) map[r.produto] = {qtd:0, faturamento:0};
+    map[r.produto].qtd += r.qtd;
+    map[r.produto].faturamento += r.faturamento;
+  });
+  const rows = Object.entries(map).sort((a,b)=>b[1].faturamento-a[1].faturamento);
+  const tbody = document.querySelector('#tblProdutos tbody');
+  if(!rows.length){ tbody.innerHTML = `<tr><td colspan="3" class="empty">Sem vendas no período.</td></tr>`; return; }
+  tbody.innerHTML = rows.map(([nome,v])=>`
+    <tr><td class="name" title="${nome}">${nome}</td><td class="num">${fmtNum(v.qtd)}</td><td class="num">${fmtBRL(v.faturamento)}</td></tr>
+  `).join('');
+}
+
+function renderQuiz(d){
+  const quiz = d.quiz;
+  const row = document.getElementById('quizRow');
+  if(!quiz || !quiz.total_respostas){ row.style.display='none'; return; }
+  row.style.display='';
+  document.getElementById('quizNote').textContent = `${fmtNum(quiz.total_respostas)} respostas do quiz de qualificação`;
+  const grid = document.getElementById('quizGrid');
+  grid.innerHTML = (quiz.perguntas||[]).map(p=>{
+    const top = (p.respostas||[]).slice(0,5);
+    const max = top.length ? Math.max(...top.map(r=>r.qtd)) : 1;
+    const rows = top.map(r=>`
+      <div class="qbar-row">
+        <div class="qbar-top"><span class="a" title="${r.resposta}">${r.resposta}</span><span class="n">${fmtNum(r.qtd)}</span></div>
+        <div class="qbar-track"><div class="qbar-fill" style="width:${(r.qtd/max*100).toFixed(0)}%"></div></div>
+      </div>`).join('');
+    return `<div class="qcard"><div class="qlbl">${p.label}</div>${rows || '<div class="empty" style="padding:10px 0;">Sem respostas</div>'}</div>`;
+  }).join('');
+}
+
+function renderAll(d){
+  currentData = d;
+  renderKpis(d);
+  renderLeadsDay(d);
+  renderOrigem(d);
+  renderCampanhas(d);
+  renderCriativos(d);
+  renderProdutos(d);
+  renderQuiz(d);
+  document.getElementById('updatedAt').textContent = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+}
+
+async function load(showSpin){
+  const btn = document.getElementById('refreshBtn');
+  const ic = btn.querySelector('.refresh-ic');
+  if(showSpin) ic.classList.add('spinning');
+  const days = parseInt(document.getElementById('periodSelect').value,10);
+  try{
+    const d = await fetchStats(days);
+    document.getElementById('errBox').style.display = 'none';
+    setLive(true);
+    renderAll(d);
+  }catch(e){
+    setLive(false);
+    const box = document.getElementById('errBox');
+    box.style.display = 'block';
+    box.textContent = 'Não foi possível atualizar os dados agora: ' + e.message;
+  }finally{
+    if(showSpin) setTimeout(()=>ic.classList.remove('spinning'), 400);
+  }
+}
+
+document.querySelectorAll('#tblCampanhas thead th[data-k]').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const k = th.dataset.k;
+    if(sortState.key===k) sortState.dir = sortState.dir==='asc'?'desc':'asc';
+    else { sortState.key = k; sortState.dir = 'desc'; }
+    if(currentData) renderCampanhas(currentData);
+  });
+});
+
+document.getElementById('refreshBtn').addEventListener('click', ()=>load(true));
+document.getElementById('periodSelect').addEventListener('change', ()=>load(true));
+
+chartDefaults();
+load(true);
+refreshTimer = setInterval(()=>load(false), 60000);
+</script>
+</body>
+</html>
