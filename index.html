@@ -121,6 +121,7 @@
   thead th.sorted{color:var(--red);}
   tbody td{padding:11px 10px; border-bottom:1px solid #1c1c1c; color:var(--text); vertical-align:middle;}
   tbody tr:hover{background:#161616;}
+  tbody tr.selected-row{background:rgba(196,30,30,.08); box-shadow:inset 3px 0 0 var(--red);}
   td.num, th.num{text-align:right; font-family:'JetBrains Mono',monospace; font-variant-numeric:tabular-nums;}
   td.name{max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .table-scroll{max-height:420px; overflow-y:auto;}
@@ -174,11 +175,17 @@
       <div class="live"><span class="dot" id="liveDot"></span><span id="liveText">Ao vivo</span></div>
       <span class="sub" id="updatedAt" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-dim);"></span>
       <select id="periodSelect">
+        <option value="1">Hoje</option>
+        <option value="2">Últimos 2 dias</option>
+        <option value="3">Últimos 3 dias</option>
         <option value="7">Últimos 7 dias</option>
         <option value="14">Últimos 14 dias</option>
         <option value="30" selected>Últimos 30 dias</option>
         <option value="60">Últimos 60 dias</option>
         <option value="90">Últimos 90 dias</option>
+      </select>
+      <select id="campanhaSelect">
+        <option value="">Todas as campanhas</option>
       </select>
       <button class="ghost" id="refreshBtn">
         <svg class="refresh-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg>
@@ -304,7 +311,7 @@ const fmtBRL = (v) => (v||0).toLocaleString('pt-BR', { style:'currency', currenc
 const fmtNum = (v) => (v||0).toLocaleString('pt-BR');
 const fmtPct = (v) => (v||0).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
 
-async function fetchStats(days){
+async function fetchStats(days, campanha){
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_dashboard_stats`, {
     method:'POST',
     headers:{
@@ -312,7 +319,7 @@ async function fetchStats(days){
       'apikey': SUPABASE_KEY,
       'Authorization': `Bearer ${SUPABASE_KEY}`
     },
-    body: JSON.stringify({ p_days: days })
+    body: JSON.stringify({ p_days: days, p_campanha: campanha || null })
   });
   if(!res.ok) throw new Error(`Erro ${res.status} ao consultar Supabase`);
   return res.json();
@@ -464,7 +471,8 @@ function renderCampanhas(d){
   }
   tbody.innerHTML = raw.map(r=>{
     const c = classify(r, avgCpl);
-    return `<tr>
+    const isSelected = document.getElementById('campanhaSelect').value === String(r.campanha_id);
+    return `<tr class="${isSelected?'selected-row':''}">
       <td class="name" title="${r.campanha_nome}">${r.campanha_nome}</td>
       <td class="num">${fmtNum(r.leads)}</td>
       <td class="num">${fmtBRL(r.investido)}</td>
@@ -537,8 +545,19 @@ function renderEventos(d){
   }).join('');
 }
 
+function populateCampanhaSelect(d){
+  const sel = document.getElementById('campanhaSelect');
+  const current = sel.value;
+  const campanhas = (d.campanhas||[]).filter(c=>c.campanha_id).slice().sort((a,b)=>b.investido-a.investido || b.leads-a.leads);
+  sel.innerHTML = '<option value="">Todas as campanhas</option>' + campanhas.map(c=>
+    `<option value="${c.campanha_id.replace(/"/g,'&quot;')}">${c.campanha_nome}</option>`
+  ).join('');
+  if([...sel.options].some(o=>o.value===current)) sel.value = current;
+}
+
 function renderAll(d){
   currentData = d;
+  populateCampanhaSelect(d);
   renderKpis(d);
   renderLeadsDay(d);
   renderOrigem(d);
@@ -555,8 +574,9 @@ async function load(showSpin){
   const ic = btn.querySelector('.refresh-ic');
   if(showSpin) ic.classList.add('spinning');
   const days = parseInt(document.getElementById('periodSelect').value,10);
+  const campanha = document.getElementById('campanhaSelect').value;
   try{
-    const d = await fetchStats(days);
+    const d = await fetchStats(days, campanha);
     document.getElementById('errBox').style.display = 'none';
     setLive(true);
     renderAll(d);
@@ -590,6 +610,7 @@ document.querySelectorAll('#tblCampanhas thead th[data-k]').forEach(th=>{
 
 document.getElementById('refreshBtn').addEventListener('click', ()=>load(true));
 document.getElementById('periodSelect').addEventListener('change', ()=>load(true));
+document.getElementById('campanhaSelect').addEventListener('change', ()=>load(true));
 
 chartDefaults();
 load(true);
