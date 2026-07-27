@@ -60,7 +60,7 @@
     70%{box-shadow:0 0 0 8px rgba(63,174,92,0);}
     100%{box-shadow:0 0 0 0 rgba(63,174,92,0);}
   }
-  select, button.ghost{
+  select, button.ghost, .ms-btn{
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
     font-family:'JetBrains Mono',monospace; font-size:12px; padding:8px 12px;
     cursor:pointer; text-transform:uppercase; letter-spacing:.04em;
@@ -157,6 +157,27 @@
 
   .footer-note{font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--text-faint); text-align:center; padding-top:6px;}
   .err{background:#2a1414; border:1px solid var(--red-dim); color:#f2b9b9; padding:12px 16px; font-family:'JetBrains Mono',monospace; font-size:12px; margin-bottom:20px; display:none;}
+
+  .multiselect{position:relative;}
+  .ms-btn{min-width:170px; max-width:260px; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .ms-btn::after{content:'▾'; font-size:9px; color:var(--text-dim); flex:none;}
+  .ms-btn.active{border-color:var(--red); color:var(--text);}
+  .ms-panel{
+    position:absolute; top:calc(100% + 6px); right:0; z-index:50; width:300px;
+    background:var(--panel-2); border:1px solid var(--line); box-shadow:0 12px 28px rgba(0,0,0,.5);
+  }
+  .ms-actions{display:flex; gap:1px; background:var(--line); border-bottom:1px solid var(--line);}
+  .ms-actions button{
+    flex:1; background:var(--panel-2); border:none; color:var(--text-dim); font-family:'JetBrains Mono',monospace;
+    font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; padding:8px; cursor:pointer;
+  }
+  .ms-actions button:hover{color:var(--red); background:#1e1e1e;}
+  .ms-list{max-height:260px; overflow-y:auto; padding:6px 0;}
+  .ms-item{display:flex; align-items:center; gap:9px; padding:7px 12px; cursor:pointer; font-size:12.5px; color:var(--text);}
+  .ms-item:hover{background:#1e1e1e;}
+  .ms-item input{accent-color:var(--red); width:14px; height:14px; flex:none; cursor:pointer;}
+  .ms-item .ms-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;}
+  .ms-empty{padding:16px 12px; color:var(--text-faint); font-family:'JetBrains Mono',monospace; font-size:11.5px; text-align:center;}
 </style>
 </head>
 <body>
@@ -184,9 +205,16 @@
         <option value="60">Últimos 60 dias</option>
         <option value="90">Últimos 90 dias</option>
       </select>
-      <select id="campanhaSelect">
-        <option value="">Todas as campanhas</option>
-      </select>
+      <div class="multiselect" id="campanhaMulti">
+        <button type="button" class="ms-btn" id="campanhaBtn">Todas as campanhas</button>
+        <div class="ms-panel" id="campanhaPanel" hidden>
+          <div class="ms-actions">
+            <button type="button" data-act="all">Selecionar todas</button>
+            <button type="button" data-act="none">Limpar</button>
+          </div>
+          <div class="ms-list" id="campanhaList"></div>
+        </div>
+      </div>
       <select id="fonteSelect">
         <option value="">Todas as fontes</option>
       </select>
@@ -314,7 +342,7 @@ const fmtBRL = (v) => (v||0).toLocaleString('pt-BR', { style:'currency', currenc
 const fmtNum = (v) => (v||0).toLocaleString('pt-BR');
 const fmtPct = (v) => (v||0).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
 
-async function fetchStats(days, campanha, fonte){
+async function fetchStats(days, campanhas, fonte){
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_dashboard_stats`, {
     method:'POST',
     headers:{
@@ -322,7 +350,7 @@ async function fetchStats(days, campanha, fonte){
       'apikey': SUPABASE_KEY,
       'Authorization': `Bearer ${SUPABASE_KEY}`
     },
-    body: JSON.stringify({ p_days: days, p_campanha: campanha || null, p_fonte: fonte || null })
+    body: JSON.stringify({ p_days: days, p_campanhas: (campanhas && campanhas.length) ? campanhas : null, p_fonte: fonte || null })
   });
   if(!res.ok) throw new Error(`Erro ${res.status} ao consultar Supabase`);
   return res.json();
@@ -474,7 +502,7 @@ function renderCampanhas(d){
   }
   tbody.innerHTML = raw.map(r=>{
     const c = classify(r, avgCpl);
-    const isSelected = document.getElementById('campanhaSelect').value === String(r.campanha_id);
+    const isSelected = selectedCampanhas.has(String(r.campanha_id));
     return `<tr class="${isSelected?'selected-row':''}">
       <td class="name" title="${r.campanha_nome}">${r.campanha_nome}</td>
       <td class="num">${fmtNum(r.leads)}</td>
@@ -548,15 +576,67 @@ function renderEventos(d){
   }).join('');
 }
 
-function populateCampanhaSelect(d){
-  const sel = document.getElementById('campanhaSelect');
-  const current = sel.value;
-  const campanhas = (d.campanhas||[]).filter(c=>c.campanha_id).slice().sort((a,b)=>b.investido-a.investido || b.leads-a.leads);
-  sel.innerHTML = '<option value="">Todas as campanhas</option>' + campanhas.map(c=>
-    `<option value="${c.campanha_id.replace(/"/g,'&quot;')}">${c.campanha_nome}</option>`
-  ).join('');
-  if([...sel.options].some(o=>o.value===current)) sel.value = current;
+let selectedCampanhas = new Set();
+let campanhaOptionsCache = [];
+
+function updateCampanhaBtnLabel(){
+  const btn = document.getElementById('campanhaBtn');
+  if(selectedCampanhas.size===0){ btn.textContent = 'Todas as campanhas'; btn.classList.remove('active'); return; }
+  btn.classList.add('active');
+  if(selectedCampanhas.size===1){
+    const id = [...selectedCampanhas][0];
+    const found = campanhaOptionsCache.find(c=>c.campanha_id===id);
+    btn.textContent = found ? found.campanha_nome : id;
+  } else {
+    btn.textContent = `${selectedCampanhas.size} campanhas selecionadas`;
+  }
 }
+
+function renderCampanhaList(){
+  const list = document.getElementById('campanhaList');
+  if(!campanhaOptionsCache.length){ list.innerHTML = '<div class="ms-empty">Nenhuma campanha encontrada</div>'; return; }
+  list.innerHTML = campanhaOptionsCache.map(c=>{
+    const checked = selectedCampanhas.has(c.campanha_id) ? 'checked' : '';
+    const safeId = c.campanha_id.replace(/"/g,'&quot;');
+    return `<label class="ms-item">
+      <input type="checkbox" value="${safeId}" ${checked}>
+      <span class="ms-name" title="${c.campanha_nome}">${c.campanha_nome}</span>
+    </label>`;
+  }).join('');
+  list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) selectedCampanhas.add(cb.value);
+      else selectedCampanhas.delete(cb.value);
+      updateCampanhaBtnLabel();
+      load(true);
+    });
+  });
+}
+
+function populateCampanhaSelect(d){
+  campanhaOptionsCache = (d.campanhas||[]).filter(c=>c.campanha_id)
+    .slice().sort((a,b)=>b.investido-a.investido || b.leads-a.leads);
+  // drop selections that no longer exist
+  const validIds = new Set(campanhaOptionsCache.map(c=>c.campanha_id));
+  [...selectedCampanhas].forEach(id=>{ if(!validIds.has(id)) selectedCampanhas.delete(id); });
+  updateCampanhaBtnLabel();
+  renderCampanhaList();
+}
+
+document.getElementById('campanhaBtn').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  document.getElementById('campanhaPanel').hidden = !document.getElementById('campanhaPanel').hidden;
+});
+document.getElementById('campanhaPanel').addEventListener('click', (e)=> e.stopPropagation());
+document.addEventListener('click', ()=>{ document.getElementById('campanhaPanel').hidden = true; });
+document.querySelector('.ms-actions [data-act="all"]').addEventListener('click', ()=>{
+  campanhaOptionsCache.forEach(c=>selectedCampanhas.add(c.campanha_id));
+  updateCampanhaBtnLabel(); renderCampanhaList(); load(true);
+});
+document.querySelector('.ms-actions [data-act="none"]').addEventListener('click', ()=>{
+  selectedCampanhas.clear();
+  updateCampanhaBtnLabel(); renderCampanhaList(); load(true);
+});
 
 function populateFonteSelect(d){
   const sel = document.getElementById('fonteSelect');
@@ -588,10 +668,9 @@ async function load(showSpin){
   const ic = btn.querySelector('.refresh-ic');
   if(showSpin) ic.classList.add('spinning');
   const days = parseInt(document.getElementById('periodSelect').value,10);
-  const campanha = document.getElementById('campanhaSelect').value;
   const fonte = document.getElementById('fonteSelect').value;
   try{
-    const d = await fetchStats(days, campanha, fonte);
+    const d = await fetchStats(days, [...selectedCampanhas], fonte);
     document.getElementById('errBox').style.display = 'none';
     setLive(true);
     renderAll(d);
@@ -625,7 +704,6 @@ document.querySelectorAll('#tblCampanhas thead th[data-k]').forEach(th=>{
 
 document.getElementById('refreshBtn').addEventListener('click', ()=>load(true));
 document.getElementById('periodSelect').addEventListener('change', ()=>load(true));
-document.getElementById('campanhaSelect').addEventListener('change', ()=>load(true));
 document.getElementById('fonteSelect').addEventListener('change', ()=>load(true));
 
 chartDefaults();
